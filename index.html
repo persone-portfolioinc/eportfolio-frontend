@@ -3,20 +3,41 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Create a professional portfolio with image and CV upload, customizable templates, and live preview." />
+  <meta name="robots" content="noindex" />
   <title>ePortfolio Generator</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body { background-color: #f3f4f6; font-family: 'Inter', sans-serif; }
+    .fade-in { animation: fadeIn 1s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .preview-toggle { display: none; }
+    @media (max-width: 640px) { .preview-toggle { display: block; } .preview-hidden { display: none; } }
+    .error-message { display: none; color: #dc2626; text-align: center; padding: 1rem; }
+    .error .error-message { display: block; }
+    .input-error { border-color: #dc2626; }
+    .template-default { background-color: #ffffff; color: #1f2937; }
+    .template-dark { background-color: #1f2937; color: #f9fafb; }
+    .template-vibrant { background-color: #fef3c7; color: #7c2d12; }
+    .progress-bar { transition: width 0.3s ease-in-out; }
+    .image-preview { transition: opacity 0.3s ease-in-out; }
+  </style>
 </head>
-<body class="font-inter">
+<body class="antialiased">
   <div id="root"></div>
+  <div id="error" className="error-message">
+    <p>Error loading the portfolio page. Please try refreshing or check the console (F12) for details.</p>
+  </div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    try {
+      console.log('Loading index.html...');
+      const { useState, useEffect } = React;
 
-    function App() {
-      const [formData, setFormData] = useState({
+      const initialFormData = {
         name: '',
         profession: '',
         tagline: '',
@@ -25,454 +46,863 @@
         email: '',
         linkedin: '',
         phone: '',
-        skills: ['', '', '', ''],
-        skillProficiencies: [80, 70, 60, 50],
-        projects: [
-          { title: '', description: '', link: '', category: '' },
-          { title: '', description: '', link: '', category: '' },
-        ],
-      });
-      const [cvFile, setCvFile] = useState(null);
-      const [imageFile, setImageFile] = useState(null);
-      const [imagePreview, setImagePreview] = useState(null);
-      const [template, setTemplate] = useState('default');
-      const [message, setMessage] = useState('');
-      const [isLoading, setIsLoading] = useState(false);
-      const [countdown, setCountdown] = useState(null);
-
-      const sanitizeInput = (input) => {
-        return input.replace(/[<>&'"]/g, (char) => ({
-          '<': '&lt;',
-          '>': '&gt;',
-          '&': '&amp;',
-          "'": '&#39;',
-          '"': '&quot;'
-        }[char]));
+        skills: [{ name: '', proficiency: 50 }],
+        projects: [{ title: '', description: '', link: '', category: '' }],
+        template: 'default'
       };
 
-      const handleInputChange = (e, index = null, field = null) => {
-        const value = sanitizeInput(e.target.value);
-        if (index !== null && field) {
-          if (field === 'skills') {
-            const newSkills = [...formData.skills];
-            newSkills[index] = value;
-            setFormData({ ...formData, skills: newSkills });
-          } else if (field === 'skillProficiencies') {
-            const newProficiencies = [...formData.skillProficiencies];
-            newProficiencies[index] = parseInt(value) || 0;
-            setFormData({ ...formData, skillProficiencies: newProficiencies });
-          } else {
-            const newProjects = [...formData.projects];
-            newProjects[index][field] = value;
-            setFormData({ ...formData, projects: newProjects });
-          }
-        } else {
-          setFormData({ ...formData, [e.target.name]: value });
-        }
+      const FormInput = ({ id, name, label, value, onChange, required, placeholder, error, type = 'text' }) => {
+        console.log(`Rendering FormInput: ${name}`);
+        return (
+          <div className="mb-4">
+            <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-2">{label} {required && '*'}</label>
+            <input
+              type={type}
+              id={id}
+              name={name}
+              value={value || ''}
+              onChange={onChange}
+              className={`w-full rounded-md border ${error ? 'input-error' : 'border-gray-300'} shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50`}
+              required={required}
+              aria-required={required}
+              placeholder={placeholder}
+              aria-invalid={!!error}
+            />
+            {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+          </div>
+        );
       };
 
-      const handleFileChange = (e, type) => {
-        const file = e.target.files[0];
-        if (type === 'cv' && file && file.type !== 'application/pdf') {
-          setMessage('Please upload a valid PDF file for CV.');
-          return;
-        }
-        if (type === 'image' && file && !file.type.startsWith('image/')) {
-          setMessage('Please upload a valid image file (JPEG/PNG).');
-          return;
-        }
-        if (type === 'cv') {
-          setCvFile(file);
-        } else {
-          setImageFile(file);
-          const reader = new FileReader();
-          reader.onloadend = () => setImagePreview(reader.result);
-          if (file) reader.readAsDataURL(file);
-        }
+      const FormTextarea = ({ id, name, label, value, onChange, required, placeholder, maxLength, currentLength, error }) => {
+        console.log(`Rendering FormTextarea: ${name}`);
+        return (
+          <div className="mb-4">
+            <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-2">{label} {required && '*'}</label>
+            <textarea
+              id={id}
+              name={name}
+              value={value || ''}
+              onChange={onChange}
+              className={`w-full rounded-md border ${error ? 'input-error' : 'border-gray-300'} shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50`}
+              rows="4"
+              required={required}
+              aria-required={required}
+              placeholder={placeholder}
+              maxLength={maxLength}
+              aria-invalid={!!error}
+            />
+            {maxLength && <p className="text-gray-600 text-sm">{currentLength}/{maxLength} characters</p>}
+            {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+          </div>
+        );
       };
 
-      const validateForm = () => {
-        if (!formData.name || !formData.profession || !formData.email) {
-          setMessage('Name, profession, and email are required.');
-          return false;
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email)) {
-          setMessage('Please enter a valid email address.');
-          return false;
-        }
-        return true;
-      };
-
-      const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!validateForm()) return;
-
-        setIsLoading(true);
-        setMessage('');
-        setCountdown(60);
-
-        const data = new FormData();
-        for (const key in formData) {
-          if (Array.isArray(formData[key])) {
-            data.append(key, JSON.stringify(formData[key]));
-          } else {
-            data.append(key, formData[key]);
-          }
-        }
-        if (cvFile) data.append('cv', cvFile);
-        if (imageFile) data.append('image', imageFile);
-        data.append('template', template);
-
-        try {
-          const response = await fetch('https://eportfolio-backend-vevo.onrender.com/api/generate', {
-            method: 'POST',
-            body: data,
-          });
-          const result = await response.json();
-          if (response.ok) {
-            setMessage(`ePortfolio is being generated! It will be live at: ${result.url}`);
-          } else {
-            setMessage(`Error: ${result.error || 'Failed to generate ePortfolio.'}`);
-            setCountdown(null);
-          }
-        } catch (error) {
-          setMessage('Error connecting to the server. Please try again.');
-          setCountdown(null);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      useEffect(() => {
-        if (countdown === null) return;
-        if (countdown <= 0) {
-          setCountdown(null);
-          return;
-        }
-        const timer = setInterval(() => {
-          setCountdown((prev) => prev - 1);
-        }, 1000);
-        return () => clearInterval(timer);
-      }, [countdown]);
-
-      const formatCountdown = (seconds) => {
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
-      };
-
-      return (
-        <div className="min-h-screen bg-gray-50">
-          <header className="bg-gradient-to-r from-indigo-600 to-blue-500 text-white py-6 sticky top-0 z-50 shadow-lg">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-              <h1 className="text-3xl font-poppins font-bold">ePortfolio Generator</h1>
-              <nav className="space-x-6">
-                <a href="#features" className="hover:text-yellow-300 transition">Features</a>
-                <a href="#how-it-works" className="hover:text-yellow-300 transition">How It Works</a>
-                <a href="#faq" className="hover:text-yellow-300 transition">FAQ</a>
-                <a href="#generator" className="bg-yellow-400 text-gray-900 py-2 px-4 rounded-full font-semibold hover:bg-yellow-500 transition">Get Started</a>
-              </nav>
-            </div>
-          </header>
-
-          <section className="bg-gradient-to-r from-indigo-600 to-blue-500 text-white py-20">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <h1 className="text-4xl md:text-5xl font-poppins font-bold mb-6">Build Your Professional ePortfolio</h1>
-              <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto">Create a stunning, personalized portfolio to showcase your skills, projects, and achievements in just minutes.</p>
-              <a href="#generator" className="inline-block bg-yellow-400 text-gray-900 py-3 px-8 rounded-full font-semibold hover:bg-yellow-500 transition">Start Creating Now</a>
-            </div>
-          </section>
-
-          <section id="features" className="py-16 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-12 text-center">Why Choose Our ePortfolio Generator?</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="p-6 bg-gray-50 rounded-lg shadow-md hover:shadow-lg transition">
-                  <h3 className="text-xl font-semibold text-indigo-600 mb-4">Customizable Templates</h3>
-                  <p className="text-gray-600">Choose from professional templates to create a portfolio that reflects your unique style.</p>
-                </div>
-                <div className="p-6 bg-gray-50 rounded-lg shadow-md hover:shadow-lg transition">
-                  <h3 className="text-xl font-semibold text-indigo-600 mb-4">Fast & Easy</h3>
-                  <p className="text-gray-600">Generate your portfolio in minutes with our intuitive form-based interface.</p>
-                </div>
-                <div className="p-6 bg-gray-50 rounded-lg shadow-md hover:shadow-lg transition">
-                  <h3 className="text-xl font-semibold text-indigo-600 mb-4">Secure Hosting</h3>
-                  <p className="text-gray-600">Your portfolio is hosted securely on GitHub Pages with a unique URL.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section id="how-it-works" className="py-16 bg-gray-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-12 text-center">How It Works</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-indigo-600 mb-4">1</div>
-                  <h3 className="text-xl font-semibold mb-4">Fill Out the Form</h3>
-                  <p className="text-gray-600">Enter your details, skills, and projects in our easy-to-use form.</p>
-                </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-indigo-600 mb-4">2</div>
-                  <h3 className="text-xl font-semibold mb-4">Choose a Template</h3>
-                  <p className="text-gray-600">Select from our professionally designed templates to match your style.</p>
-                </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-indigo-600 mb-4">3</div>
-                  <h3 className="text-xl font-semibold mb-4">Get Your Portfolio</h3>
-                  <p className="text-gray-600">Receive a unique URL to your live portfolio in just a minute.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section id="generator" className="py-16 bg-white">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-8 text-center">Create Your ePortfolio</h2>
-              <div className="bg-gray-100 p-8 rounded-xl shadow-lg">
-                <div className="mb-8">
-                  <h3 className="text-xl font-semibold text-gray-800 mb-4">Preview Profile Image</h3>
-                  {imagePreview ? (
-                    <img src={imagePreview} alt="Profile Preview" className="w-32 h-32 rounded-full mx-auto object-cover shadow-md" />
-                  ) : (
-                    <div className="w-32 h-32 rounded-full mx-auto bg-gray-200 flex items-center justify-center text-gray-500">No Image</div>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Profession</label>
-                    <input
-                      type="text"
-                      name="profession"
-                      value={formData.profession}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">Tagline/Mission Statement</label>
-                    <input
-                      type="text"
-                      name="tagline"
-                      value={formData.tagline}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">Professional Summary</label>
-                    <textarea
-                      name="summary"
-                      value={formData.summary}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                      rows="4"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">About Me</label>
-                    <textarea
-                      name="about"
-                      value={formData.about}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                      rows="4"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">LinkedIn URL</label>
-                    <input
-                      type="url"
-                      name="linkedin"
-                      value={formData.linkedin}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                    />
-                  </div>
-                </div>
-                <div className="mt-8">
-                  <label className="block text-sm font-medium text-gray-700">Skills (4)</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                    {formData.skills.map((skill, index) => (
-                      <div key={index} className="flex space-x-4">
-                        <input
-                          type="text"
-                          value={skill}
-                          onChange={(e) => handleInputChange(e, index, 'skills')}
-                          placeholder={`Skill ${index + 1}`}
-                          className="block w-3/4 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                        />
-                        <input
-                          type="number"
-                          value={formData.skillProficiencies[index]}
-                          onChange={(e) => handleInputChange(e, index, 'skillProficiencies')}
-                          placeholder="Proficiency %"
-                          min="0"
-                          max="100"
-                          className="block w-1/4 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-8">
-                  <label className="block text-sm font-medium text-gray-700">Projects (2)</label>
-                  {formData.projects.map((project, index) => (
-                    <div key={index} className="mt-4 p-4 bg-gray-50 rounded-lg">
-                      <input
-                        type="text"
-                        value={project.title}
-                        onChange={(e) => handleInputChange(e, index, 'title')}
-                        placeholder={`Project ${index + 1} Title`}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 mb-2"
-                      />
-                      <textarea
-                        value={project.description}
-                        onChange={(e) => handleInputChange(e, index, 'description')}
-                        placeholder={`Project ${index + 1} Description`}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 mb-2"
-                        rows="3"
-                      />
-                      <input
-                        type="url"
-                        value={project.link}
-                        onChange={(e) => handleInputChange(e, index, 'link')}
-                        placeholder={`Project ${index + 1} Link (Optional)`}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 mb-2"
-                      />
-                      <input
-                        type="text"
-                        value={project.category}
-                        onChange={(e) => handleInputChange(e, index, 'category')}
-                        placeholder={`Project ${index + 1} Category`}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Upload CV (PDF)</label>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={(e) => handleFileChange(e, 'cv')}
-                      className="mt-1 block w-full text-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Upload Profile Image (JPEG/PNG)</label>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png"
-                      onChange={(e) => handleFileChange(e, 'image')}
-                      className="mt-1 block w-full text-gray-500"
-                    />
-                  </div>
-                </div>
-                <div className="mt-8">
-                  <label className="block text-sm font-medium text-gray-700">Select Template</label>
-                  <select
-                    value={template}
-                    onChange={(e) => setTemplate(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
-                  >
-                    <option value="default">Default Template</option>
-                    <option value="dark">Dark Theme</option>
-                    <option value="vibrant">Vibrant Theme</option>
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isLoading}
-                  className={`mt-8 w-full py-3 px-6 rounded-full font-semibold focus:outline-none focus:ring focus:ring-indigo-500 focus:ring-opacity-50 ${
-                    isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                  }`}
-                >
-                  {isLoading ? 'Generating...' : 'Generate ePortfolio'}
-                </button>
-                {message && (
-                  <div className={`mt-6 text-center p-4 rounded-lg ${message.includes('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                    <p>{message}</p>
-                    {countdown !== null && (
-                      <p className="mt-2">Your portfolio will be live in approximately: <span className="font-bold">{formatCountdown(countdown)}</span></p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section id="faq" className="py-16 bg-gray-100">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-8 text-center">Frequently Asked Questions</h2>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800">How long does it take to generate a portfolio?</h3>
-                  <p className="text-gray-600">Your portfolio will be generated and live within approximately 1 minute after submission.</p>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Can I update my portfolio later?</h3>
-                  <p className="text-gray-600">Yes, you can regenerate your portfolio with updated information using the same form.</p>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Is my data secure?</h3>
-                  <p className="text-gray-600">We prioritize security and do not store your personal data after generating your portfolio.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <footer className="bg-gray-800 text-white py-8">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <p className="mb-4">© 2025 ePortfolio Generator. All rights reserved.</p>
-              <div className="space-x-4">
-                <a href="#features" className="hover:text-yellow-400 transition">Features</a>
-                <a href="#how-it-works" className="hover:text-yellow-400 transition">How It Works</a>
-                <a href="#faq" className="hover:text-yellow-400 transition">FAQ</a>
-              </div>
-            </div>
-          </footer>
+      const FileInput = ({ id, label, accept, onChange, error }) => (
+        <div className="mb-4">
+          <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+          <input
+            type="file"
+            id={id}
+            accept={accept}
+            onChange={onChange}
+            className="w-full text-gray-500"
+          />
+          {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
         </div>
       );
-    }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+      const SkillInput = ({ index, skill, onChange, onRemove }) => (
+        <div className="flex space-x-4 mb-4">
+          <div className="flex-1">
+            <label htmlFor={`skill-${index}`} className="block text-sm font-medium text-gray-700 mb-2">Skill {index + 1}</label>
+            <input
+              type="text"
+              id={`skill-${index}`}
+              value={skill.name || ''}
+              onChange={(e) => onChange(index, 'name', e.target.value)}
+              className="w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
+              placeholder="e.g., JavaScript"
+            />
+          </div>
+          <div className="w-1/3">
+            <label htmlFor={`proficiency-${index}`} className="block text-sm font-medium text-gray-700 mb-2">Proficiency (%)</label>
+            <input
+              type="number"
+              id={`proficiency-${index}`}
+              value={skill.proficiency || 50}
+              onChange={(e) => onChange(index, 'proficiency', parseInt(e.target.value) || 0)}
+              min="0"
+              max="100"
+              className="w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
+            />
+          </div>
+          {index > 0 && (
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              className="mt-8 bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+              aria-label={`Remove skill ${index + 1}`}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      );
+
+      const ProjectInput = ({ index, project, onChange, onRemove }) => (
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+          <FormInput
+            id={`project-title-${index}`}
+            name={`project-title-${index}`}
+            label={`Project ${index + 1} Title`}
+            value={project.title}
+            onChange={(e) => onChange(index, 'title', e.target.value)}
+            placeholder="Project Title"
+          />
+          <FormTextarea
+            id={`project-description-${index}`}
+            name={`project-description-${index}`}
+            label="Description"
+            value={project.description}
+            onChange={(e) => onChange(index, 'description', e.target.value)}
+            placeholder="Describe your project"
+            maxLength={500}
+            currentLength={project.description ? project.description.length : 0}
+          />
+          <FormInput
+            id={`project-link-${index}`}
+            name={`project-link-${index}`}
+            label="Project Link (Optional)"
+            value={project.link}
+            onChange={(e) => onChange(index, 'link', e.target.value)}
+            type="url"
+            placeholder="https://project.com"
+          />
+          <FormInput
+            id={`project-category-${index}`}
+            name={`project-category-${index}`}
+            label="Category"
+            value={project.category}
+            onChange={(e) => onChange(index, 'category', e.target.value)}
+            placeholder="e.g., Web Development"
+          />
+          {index > 0 && (
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+              aria-label={`Remove project ${index + 1}`}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      );
+
+      const PortfolioPreview = ({ formData, showPreview, togglePreview, imagePreview, cvFile, cvUrl }) => {
+        console.log('Rendering PortfolioPreview');
+        const skillsList = (formData.skills || []).filter(skill => skill.name && skill.name.trim());
+        const projectsList = (formData.projects || []).filter(project => project.title && project.title.trim());
+
+        return (
+          <div className={`md:w-1/2 ${showPreview ? '' : 'preview-hidden'}`}>
+            <button
+              onClick={togglePreview}
+              className="preview-toggle bg-blue-600 text-white px-4 py-2 rounded-lg mb-4 md:hidden"
+              aria-label={showPreview ? 'Hide preview' : 'Show preview'}
+            >
+              {showPreview ? 'Hide Preview' : 'Show Preview'}
+            </button>
+            <div className={`p-6 rounded-lg shadow-md template-${formData.template || 'default'}`}>
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt="Profile Preview"
+                  className="w-32 h-32 rounded-full mx-auto mb-4 object-cover shadow-md image-preview"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full mx-auto mb-4 bg-gray-200 flex items-center justify-center text-gray-500 image-preview">No Image</div>
+              )}
+              <h2 className="text-2xl font-poppins font-semibold mb-2">{formData.name || 'Your Name'}</h2>
+              <p className="mb-4">{formData.profession || 'Profession'} | {formData.tagline || 'Tagline'}</p>
+              <h3 className="text-xl font-semibold mb-2">About</h3>
+              <p className="mb-4">{formData.about || 'Your about section'}</p>
+              <h3 className="text-xl font-semibold mb-2">Summary</h3>
+              <p className="mb-4">{formData.summary || 'Your summary'}</p>
+              <h3 className="text-xl font-semibold mb-2">Skills</h3>
+              <div className="space-y-2 mb-4">
+                {skillsList.length > 0 ? skillsList.map((skill, index) => (
+                  <div key={`skill-${index}`}>
+                    <span>{skill.name}</span>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className="bg-indigo-600 h-2.5 rounded-full progress-bar"
+                        style={{ width: `${Math.min(skill.proficiency, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )) : <p>No skills provided</p>}
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Projects</h3>
+              <div className="space-y-4 mb-4">
+                {projectsList.length > 0 ? projectsList.map((project, index) => (
+                  <div key={`project-${index}`}>
+                    <h4 className="font-semibold">{project.title}</h4>
+                    <p>{project.description || 'Project description'}</p>
+                    {project.link && <a href={project.link} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{project.link}</a>}
+                    <p className="text-sm">{project.category || 'Category'}</p>
+                  </div>
+                )) : <p>No projects provided</p>}
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Contact</h3>
+              <p>{formData.email || 'email@example.com'}</p>
+              <p>{formData.phone || 'Phone'}</p>
+              <p><a href={formData.linkedin || '#'} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{formData.linkedin || 'LinkedIn'}</a></p>
+              {cvFile && cvUrl && (
+                <p className="mt-2">
+                  <a href={cvUrl} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                    View Uploaded CV ({cvFile.name})
+                  </a>
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      function App() {
+        const [formData, setFormData] = useState(initialFormData);
+        const [cvFile, setCvFile] = useState(null);
+        const [cvUrl, setCvUrl] = useState(null);
+        const [imageFile, setImageFile] = useState(null);
+        const [imagePreview, setImagePreview] = useState(null);
+        const [showPreview, setShowPreview] = useState(true);
+        const [message, setMessage] = useState('');
+        const [errors, setErrors] = useState({});
+        const [isLoading, setIsLoading] = useState(false);
+        const [countdown, setCountdown] = useState(null);
+
+        useEffect(() => {
+          console.log('Running useEffect for localStorage');
+          try {
+            const saved = localStorage.getItem('portfolioForm');
+            if (saved) {
+              console.log('Loading portfolioForm from localStorage');
+              const parsed = JSON.parse(saved);
+              setFormData({
+                ...initialFormData,
+                ...parsed,
+                skills: parsed.skills && Array.isArray(parsed.skills) ? parsed.skills : initialFormData.skills,
+                projects: parsed.projects && Array.isArray(parsed.projects) ? parsed.projects : initialFormData.projects
+              });
+            }
+          } catch (e) {
+            console.error('Error parsing localStorage:', e.message);
+            setMessage('Error loading saved data. Starting fresh.');
+            setTimeout(() => setMessage(''), 3000);
+          }
+          return () => {
+            if (cvUrl) {
+              console.log('Revoking cvUrl');
+              URL.revokeObjectURL(cvUrl);
+            }
+          };
+        }, [cvUrl]);
+
+        useEffect(() => {
+          if (countdown === null) return;
+          if (countdown <= 0) {
+            setCountdown(null);
+            return;
+          }
+          const timer = setInterval(() => {
+            setCountdown((prev) => prev - 1);
+          }, 1000);
+          return () => clearInterval(timer);
+        }, [countdown]);
+
+        const formatCountdown = (seconds) => {
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+        };
+
+        const validateInput = (name, value) => {
+          if (['name', 'profession', 'email'].includes(name) && (!value || value.trim().length < 2)) {
+            return `${name.charAt(0).toUpperCase() + name.slice(1)} must be at least 2 characters`;
+          }
+          if (name === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+            return 'Please enter a valid email address';
+          }
+          if (name === 'linkedin' && value && !/^https?:\/\/(www\.)?linkedin\.com\/in\/.+$/.test(value)) {
+            return 'Please enter a valid LinkedIn URL';
+          }
+          return '';
+        };
+
+        const validateArrays = () => {
+          const errors = {};
+          if (!(formData.skills || []).some(skill => skill.name && skill.name.trim())) {
+            errors.skills = 'At least one skill is required';
+          }
+          if (!(formData.projects || []).some(project => project.title && project.title.trim())) {
+            errors.projects = 'At least one project is required';
+          }
+          return errors;
+        };
+
+        const sanitizeInput = (input) => {
+          if (typeof input !== 'string') return input;
+          return input.replace(/[<>&'"]/g, (char) => ({
+            '<': '&lt;',
+            '>': '&gt;',
+            '&': '&amp;',
+            "'": '&#39;',
+            '"': '&quot;'
+          }[char]));
+        };
+
+        const handleChange = (e) => {
+          const { name, value } = e.target;
+          const sanitizedValue = sanitizeInput(value);
+          console.log(`Input change: ${name} = ${sanitizedValue}`);
+          setFormData(prev => {
+            const newData = { ...prev, [name]: sanitizedValue };
+            try {
+              localStorage.setItem('portfolioForm', JSON.stringify(newData));
+              setMessage('Data saved locally!');
+              setTimeout(() => setMessage(''), 2000);
+            } catch (e) {
+              console.error('Error saving to localStorage:', e.message);
+            }
+            return newData;
+          });
+          setErrors(prev => ({ ...prev, [name]: validateInput(name, sanitizedValue) }));
+        };
+
+        const handleSkillChange = (index, field, value) => {
+          const sanitizedValue = field === 'name' ? sanitizeInput(value) : value;
+          console.log(`Skill change: index=${index}, field=${field}, value=${sanitizedValue}`);
+          setFormData(prev => {
+            const newSkills = [...(prev.skills || [])];
+            newSkills[index] = { ...newSkills[index], [field]: sanitizedValue };
+            const newData = { ...prev, skills: newSkills };
+            try {
+              localStorage.setItem('portfolioForm', JSON.stringify(newData));
+              setMessage('Data saved locally!');
+              setTimeout(() => setMessage(''), 2000);
+            } catch (e) {
+              console.error('Error saving to localStorage:', e.message);
+            }
+            return newData;
+          });
+        };
+
+        const handleProjectChange = (index, field, value) => {
+          const sanitizedValue = field !== 'proficiency' ? sanitizeInput(value) : value;
+          console.log(`Project change: index=${index}, field=${field}, value=${sanitizedValue}`);
+          setFormData(prev => {
+            const newProjects = [...(prev.projects || [])];
+            newProjects[index] = { ...newProjects[index], [field]: sanitizedValue };
+            const newData = { ...prev, projects: newProjects };
+            try {
+              localStorage.setItem('portfolioForm', JSON.stringify(newData));
+              setMessage('Data saved locally!');
+              setTimeout(() => setMessage(''), 2000);
+            } catch (e) {
+              console.error('Error saving to localStorage:', e.message);
+            }
+            return newData;
+          });
+        };
+
+        const addSkill = () => {
+          console.log('Adding new skill');
+          setFormData(prev => ({
+            ...prev,
+            skills: [...(prev.skills || []), { name: '', proficiency: 50 }]
+          }));
+        };
+
+        const removeSkill = (index) => {
+          console.log(`Removing skill at index ${index}`);
+          setFormData(prev => ({
+            ...prev,
+            skills: (prev.skills || []).filter((_, i) => i !== index)
+          }));
+        };
+
+        const addProject = () => {
+          console.log('Adding new project');
+          setFormData(prev => ({
+            ...prev,
+            projects: [...(prev.projects || []), { title: '', description: '', link: '', category: '' }]
+          }));
+        };
+
+        const removeProject = (index) => {
+          console.log(`Removing project at index ${index}`);
+          setFormData(prev => ({
+            ...prev,
+            projects: (prev.projects || []).filter((_, i) => i !== index)
+          }));
+        };
+
+        const handleFileChange = (e, type) => {
+          console.log(`Handling file change: type=${type}`);
+          const file = e.target.files[0];
+          if (type === 'image' && file) {
+            if (!file.type.startsWith('image/') || !['image/jpeg', 'image/png'].includes(file.type)) {
+              console.error('Invalid image file type:', file.type);
+              setMessage('Please upload a valid image file (JPEG/PNG).');
+              setTimeout(() => setMessage(''), 2000);
+              return false;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+              console.error('Image file too large:', file.size);
+              setMessage('Image file size must be under 5MB.');
+              setTimeout(() => setMessage(''), 2000);
+              return false;
+            }
+            setImageFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              console.log('Image file loaded');
+              setImagePreview(reader.result);
+            };
+            reader.onerror = () => {
+              console.error('Error reading image file');
+              setMessage('Error reading image file.');
+              setTimeout(() => setMessage(''), 2000);
+            };
+            reader.readAsDataURL(file);
+          } else if (type === 'cv' && file) {
+            if (file.type !== 'application/pdf') {
+              console.error('Invalid CV file type:', file.type);
+              setMessage('Please upload a valid PDF file for CV.');
+              setTimeout(() => setMessage(''), 2000);
+              return false;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+              console.error('CV file too large:', file.size);
+              setMessage('CV file size must be under 10MB.');
+              setTimeout(() => setMessage(''), 2000);
+              return false;
+            }
+            if (cvUrl) {
+              console.log('Revoking previous cvUrl');
+              URL.revokeObjectURL(cvUrl);
+            }
+            setCvFile(file);
+            setCvUrl(URL.createObjectURL(file));
+            console.log('New CV file set');
+          } else {
+            if (type === 'image') {
+              setImageFile(null);
+              setImagePreview(null);
+              console.log('Cleared image file');
+            } else {
+              if (cvUrl) {
+                console.log('Revoking cvUrl');
+                URL.revokeObjectURL(cvUrl);
+              }
+              setCvFile(null);
+              setCvUrl(null);
+              console.log('Cleared CV file');
+            }
+          }
+          return true;
+        };
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          console.log('Submitting portfolio:', formData);
+          const newErrors = {};
+          ['name', 'profession', 'email', 'linkedin'].forEach(key => {
+            const error = validateInput(key, formData[key]);
+            if (error) newErrors[key] = error;
+          });
+          Object.assign(newErrors, validateArrays());
+          setErrors(newErrors);
+
+          if (Object.keys(newErrors).length === 0) {
+            setIsLoading(true);
+            setMessage('');
+            setCountdown(60);
+
+            const data = new FormData();
+            for (const key in formData) {
+              if (Array.isArray(formData[key])) {
+                data.append(key, JSON.stringify(formData[key]));
+              } else {
+                data.append(key, formData[key]);
+              }
+            }
+            if (cvFile) data.append('cv', cvFile);
+            if (imageFile) data.append('image', imageFile);
+
+            try {
+              const response = await fetch('https://eportfolio-backend-vevo.onrender.com/api/generate', {
+                method: 'POST',
+                body: data,
+              });
+              const result = await response.json();
+              if (response.ok) {
+                setMessage(`ePortfolio created successfully! View at: ${result.url}`);
+                setFormData(initialFormData);
+                setImageFile(null);
+                setImagePreview(null);
+                if (cvUrl) URL.revokeObjectURL(cvUrl);
+                setCvFile(null);
+                setCvUrl(null);
+                localStorage.removeItem('portfolioForm');
+              } else {
+                console.error('Submission failed:', result);
+                setMessage(`Error: ${result.error || 'Failed to generate ePortfolio.'}`);
+                setCountdown(null);
+              }
+            } catch (error) {
+              console.error('Submission error:', error.message);
+              setMessage('Error connecting to the server. Please try again.');
+              setCountdown(null);
+            } finally {
+              setIsLoading(false);
+            }
+          } else {
+            console.log('Submission failed due to validation errors:', newErrors);
+            setMessage('Please fix the errors in the form.');
+            setTimeout(() => setMessage(''), 3000);
+          }
+        };
+
+        const handleClear = () => {
+          console.log('Clearing form');
+          try {
+            localStorage.removeItem('portfolioForm');
+            setFormData(initialFormData);
+            setImageFile(null);
+            setImagePreview(null);
+            if (cvUrl) {
+              console.log('Revoking cvUrl');
+              URL.revokeObjectURL(cvUrl);
+            }
+            setCvFile(null);
+            setCvUrl(null);
+            setErrors({});
+            setMessage('Form cleared!');
+            setTimeout(() => setMessage(''), 2000);
+          } catch (e) {
+            console.error('Error clearing localStorage:', e.message);
+            setMessage('Error clearing form. Please try again.');
+            setTimeout(() => setMessage(''), 3000);
+          }
+        };
+
+        console.log('Rendering App');
+        return (
+          <div className="min-h-screen bg-gray-50 fade-in">
+            <header className="bg-gradient-to-r from-indigo-600 to-blue-500 text-white py-6 sticky top-0 z-50 shadow-lg">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <h1 className="text-3xl font-poppins font-bold">ePortfolio Generator</h1>
+                <nav className="space-x-6">
+                  <a href="#features" className="hover:text-yellow-300 transition">Features</a>
+                  <a href="#how-it-works" className="hover:text-yellow-300 transition">How It Works</a>
+                  <a href="#faq" className="hover:text-yellow-300 transition">FAQ</a>
+                  <a href="#generator" className="bg-yellow-400 text-gray-900 py-2 px-4 rounded-full font-semibold hover:bg-yellow-500 transition">Get Started</a>
+                </nav>
+              </div>
+            </header>
+
+            <section className="bg-gradient-to-r from-indigo-600 to-blue-500 text-white py-20">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                <h1 className="text-4xl md:text-5xl font-poppins font-bold mb-6">Build Your Professional ePortfolio</h1>
+                <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto">Create a stunning, personalized portfolio to showcase your skills, projects, and achievements in just minutes.</p>
+                <a href="#generator" className="inline-block bg-yellow-400 text-gray-900 py-3 px-8 rounded-full font-semibold hover:bg-yellow-500 transition">Start Creating Now</a>
+              </div>
+            </section>
+
+            <section id="features" className="py-16 bg-white">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-12 text-center">Why Choose Our ePortfolio Generator?</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="p-6 bg-gray-50 rounded-lg shadow-md hover:shadow-lg transition">
+                    <h3 className="text-xl font-semibold text-indigo-600 mb-4">Customizable Templates</h3>
+                    <p className="text-gray-600">Choose from professional templates to create a portfolio that reflects your unique style.</p>
+                  </div>
+                  <div className="p-6 bg-gray-50 rounded-lg shadow-md hover:shadow-lg transition">
+                    <h3 className="text-xl font-semibold text-indigo-600 mb-4">Fast & Easy</h3>
+                    <p className="text-gray-600">Generate your portfolio in minutes with our intuitive form-based interface.</p>
+                  </div>
+                  <div className="p-6 bg-gray-50 rounded-lg shadow-md hover:shadow-lg transition">
+                    <h3 className="text-xl font-semibold text-indigo-600 mb-4">Secure Hosting</h3>
+                    <p className="text-gray-600">Your portfolio is hosted securely on GitHub Pages with a unique URL.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="how-it-works" className="py-16 bg-gray-100">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-12 text-center">How It Works</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-indigo-600 mb-4">1</div>
+                    <h3 className="text-xl font-semibold mb-4">Fill Out the Form</h3>
+                    <p className="text-gray-600">Enter your details, skills, and projects in our easy-to-use form.</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-indigo-600 mb-4">2</div>
+                    <h3 className="text-xl font-semibold mb-4">Choose a Template</h3>
+                    <p className="text-gray-600">Select from our professionally designed templates to match your style.</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-indigo-600 mb-4">3</div>
+                    <h3 className="text-xl font-semibold mb-4">Get Your Portfolio</h3>
+                    <p className="text-gray-600">Receive a unique URL to your live portfolio in just a minute.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="generator" className="py-16 bg-white">
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-8 text-center">Create Your ePortfolio</h2>
+                <div className="flex flex-col md:flex-row gap-8">
+                  <div className="md:w-1/2 bg-gray-100 p-8 rounded-xl shadow-lg">
+                    <form onSubmit={handleSubmit}>
+                      <FormInput
+                        id="name"
+                        name="name"
+                        label="Full Name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        required
+                        placeholder="John Doe"
+                        error={errors.name}
+                      />
+                      <FormInput
+                        id="profession"
+                        name="profession"
+                        label="Profession"
+                        value={formData.profession}
+                        onChange={handleChange}
+                        required
+                        placeholder="Software Developer"
+                        error={errors.profession}
+                      />
+                      <FormInput
+                        id="tagline"
+                        name="tagline"
+                        label="Tagline"
+                        value={formData.tagline}
+                        onChange={handleChange}
+                        placeholder="Building the future, one line of code at a time"
+                      />
+                      <FormTextarea
+                        id="summary"
+                        name="summary"
+                        label="Summary"
+                        value={formData.summary}
+                        onChange={handleChange}
+                        placeholder="Brief professional summary"
+                        maxLength={500}
+                        currentLength={formData.summary ? formData.summary.length : 0}
+                        error={errors.summary}
+                      />
+                      <FormTextarea
+                        id="about"
+                        name="about"
+                        label="About"
+                        value={formData.about}
+                        onChange={handleChange}
+                        placeholder="Tell us about yourself"
+                        maxLength={1000}
+                        currentLength={formData.about ? formData.about.length : 0}
+                        error={errors.about}
+                      />
+                      <FormInput
+                        id="email"
+                        name="email"
+                        label="Email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        required
+                        type="email"
+                        placeholder="you@example.com"
+                        error={errors.email}
+                      />
+                      <FormInput
+                        id="phone"
+                        name="phone"
+                        label="Phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        type="tel"
+                        placeholder="123-456-7890"
+                        error={errors.phone}
+                      />
+                      <FormInput
+                        id="linkedin"
+                        name="linkedin"
+                        label="LinkedIn URL"
+                        value={formData.linkedin}
+                        onChange={handleChange}
+                        type="url"
+                        placeholder="https://linkedin.com/in/username"
+                        error={errors.linkedin}
+                      />
+                      <FileInput
+                        id="image-upload"
+                        label="Profile Image (JPEG/PNG, max 5MB)"
+                        accept="image/jpeg,image/png"
+                        onChange={(e) => handleFileChange(e, 'image')}
+                        error={message.includes('image') || message.includes('5MB') ? message : ''}
+                      />
+                      <FileInput
+                        id="cv-upload"
+                        label="Upload CV (PDF, max 10MB)"
+                        accept="application/pdf"
+                        onChange={(e) => handleFileChange(e, 'cv')}
+                        error={message.includes('PDF') || message.includes('10MB') ? message : ''}
+                      />
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Skills</label>
+                        {(formData.skills || []).map((skill, index) => (
+                          <SkillInput
+                            key={`skill-${index}`}
+                            index={index}
+                            skill={skill}
+                            onChange={handleSkillChange}
+                            onRemove={removeSkill}
+                          />
+                        ))}
+                        {errors.skills && <p className="text-red-500 text-sm mt-1">{errors.skills}</p>}
+                        <button
+                          type="button"
+                          onClick={addSkill}
+                          className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          aria-label="Add skill"
+                        >
+                          Add Skill
+                        </button>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Projects</label>
+                        {(formData.projects || []).map((project, index) => (
+                          <ProjectInput
+                            key={`project-${index}`}
+                            index={index}
+                            project={project}
+                            onChange={handleProjectChange}
+                            onRemove={removeProject}
+                          />
+                        ))}
+                        {errors.projects && <p className="text-red-500 text-sm mt-1">{errors.projects}</p>}
+                        <button
+                          type="button"
+                          onClick={addProject}
+                          className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          aria-label="Add project"
+                        >
+                          Add Project
+                        </button>
+                      </div>
+                      <div className="mb-4">
+                        <label htmlFor="template" className="block text-sm font-medium text-gray-700 mb-2">Template</label>
+                        <select
+                          id="template"
+                          name="template"
+                          value={formData.template || 'default'}
+                          onChange={handleChange}
+                          className="w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
+                        >
+                          <option value="default">Default</option>
+                          <option value="dark">Dark</option>
+                          <option value="vibrant">Vibrant</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-4">
+                        <button
+                          type="submit"
+                          disabled={isLoading || Object.keys(errors).length > 0}
+                          className={`w-full py-3 px-6 rounded-full font-semibold focus:outline-none focus:ring focus:ring-indigo-500 focus:ring-opacity-50 ${
+                            isLoading || Object.keys(errors).length > 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          }`}
+                          aria-label="Create portfolio"
+                        >
+                          {isLoading ? 'Generating...' : 'Generate ePortfolio'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClear}
+                          className="w-full py-3 px-6 rounded-full font-semibold bg-gray-500 text-white hover:bg-gray-600 focus:outline-none focus:ring focus:ring-gray-500"
+                          aria-label="Clear form"
+                        >
+                          Clear Form
+                        </button>
+                      </div>
+                      {message && (
+                        <div className={`mt-6 text-center p-4 rounded-lg ${message.includes('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          <p>{message}</p>
+                          {countdown !== null && (
+                            <p className="mt-2">Your portfolio will be live in approximately: <span className="font-bold">{formatCountdown(countdown)}</span></p>
+                          )}
+                        </div>
+                      )}
+                    </form>
+                  </div>
+                  <PortfolioPreview
+                    formData={formData}
+                    showPreview={showPreview}
+                    togglePreview={() => setShowPreview(!showPreview)}
+                    imagePreview={imagePreview}
+                    cvFile={cvFile}
+                    cvUrl={cvUrl}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section id="faq" className="py-16 bg-gray-100">
+              <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-poppins font-bold text-gray-800 mb-8 text-center">Frequently Asked Questions</h2>
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">How long does it take to generate a portfolio?</h3>
+                    <p className="text-gray-600">Your portfolio will be generated and live within approximately 1 minute after submission.</p>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">Can I update my portfolio later?</h3>
+                    <p className="text-gray-600">Yes, you can regenerate your portfolio with updated information using the same form.</p>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">Is my data secure?</h3>
+                    <p className="text-gray-600">We prioritize security and do not store your personal data after generating your portfolio.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <footer className="bg-gray-800 text-white py-8">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                <p className="mb-4">© 2025 ePortfolio Generator. All rights reserved.</p>
+                <div className="space-x-4">
+                  <a href="#features" className="hover:text-yellow-400 transition">Features</a>
+                  <a href="#how-it-works" className="hover:text-yellow-400 transition">How It Works</a>
+                  <a href="#faq" className="hover:text-yellow-400 transition">FAQ</a>
+                </div>
+              </div>
+            </footer>
+          </div>
+        );
+      }
+
+      console.log('Rendering App to root');
+      ReactDOM.render(<App />, document.getElementById('root'));
+    } catch (error) {
+      console.error('Error in index.html:', error.message, error.stack);
+      document.getElementById('error').classList.add('error');
+    }
   </script>
 </body>
 </html>
